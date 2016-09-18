@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google-based churches</title>
+    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBfqQ82nkWfCYEw2Ix-o0dQ3KXT7atfEr0&v=3&libraries=geometry"></script>
+    <script type="text/javascript" src="GoogleMapsLabel.js"></script>
+    <style>
+		body {
+			/*background: url(http://sexy.drexelforchrist.org:8000/DrexelForChrist/ideas/xsl/static/bg-stainedGlass.jpg) fixed;*/
+		}
+        body > div {
+            width: 7.5in;
+            height: 9.0in;
+			background-color: rgba(255, 255, 255, 0.9);
+        }
+		#map {
+			opacity: 1;
+		}
+        /* remove ugly google report-a-bug button from maps */
+        .gm-style-cc {
+            display: none !important;
+        }
+    </style>
+ 
+    <script>
+        var geocoder;
+        var map;
+        var drexelLatLong;
+		var bounds;
+        var labelsUsed = [0];
+        var tableHasHeaders = false;
+
+		window.addEventListener('load', function () {
+			var colors = {
+				background: '#ffffff',
+				primary: '#333333', // dark
+				tertiary: '#888888', // mid
+				secondary: '#bbbbbb', // light
+				text: '#000000'
+			};
+
+
+            var styles = [
+                {
+                    featureType: "landscape",
+                    stylers: [
+                        { color: colors.background }
+                    ]
+                }, {
+                    featureType: "road",
+                    elementType: "labels.text.fill",
+                    stylers: [
+                        { color: colors.text }
+                    ]
+                }, {
+                    featureType: "road",
+                    elementType: "labels.text.stroke",
+                    stylers: [
+                        { color: colors.background }
+                    ]
+                }, {
+                    featureType: "road",
+                    elementType: "geometry.fill",
+                    stylers: [
+                        { color: colors.primary }
+                    ]
+                }, {
+                    featureType: "road",
+                    elementType: "geometry.stroke",
+                    stylers: [
+                        { color: colors.secondary }
+                    ]
+                }, {
+                    featureType: "water",
+                    stylers: [
+                        { color: colors.text }
+                    ]
+                }, {
+                    featureType: "poi", //points of interest
+                    stylers: [
+                        { visibility: 'off' }
+                    ]
+                }, {
+                    featureType: "transit", //points of interest
+                    stylers: [
+                        { visibility: 'off' }
+                    ]
+                }, {
+                    featureType: "administrative", //points of interest
+                    stylers: [
+                        { visibility: 'off' }
+                    ]
+                }
+            ];
+
+			drexelLatLong = new google.maps.LatLng(39.954, -75.188);
+			bounds = new google.maps.LatLngBounds(drexelLatLong);
+
+			var mapOptions = {
+				zoom: 14,
+				mapTypeId: google.maps.MapTypeId.ROADMAP,
+				styles: styles,
+				center: drexelLatLong,
+				disableDefaultUI: true,
+                draggable: false,
+                scrollwheel: false,
+                disableDoubleClickZoom: true,
+                zoomControl: false
+			};
+			map = new google.maps.Map(document.getElementById('map'),
+				mapOptions);
+
+
+            var marker = new google.maps.Marker({
+                position: drexelLatLong,
+                map: map,
+                title: "Drexel University",
+                icon: 'drexel-icon.png'
+            });
+
+        });
+
+		geocoder = new google.maps.Geocoder();
+
+        function handleJsonFile(files) {
+            // Check for the various File API support.
+            if (window.FileReader) {
+                // FileReader are supported.
+                readJsonFile(files[0]);
+            } else {
+                alert('FileReader is not supported in this browser, so this isn\'t gonna work.');
+            }
+        }
+
+        function readJsonFile(fileToRead) {
+            var reader = new FileReader();
+            // Read file into memory as UTF-8
+            reader.readAsText(fileToRead);
+            // Handle errors load
+            reader.onload = jsonLoadHandler;
+            reader.onerror = errorHandler;
+        }
+
+        function jsonLoadHandler(event) {
+            var json = event.target.result;
+            var d = JSON.parse(json);
+            d.sort(churchNameSort);
+            d.forEach(number);
+            console.log(d);
+            d.forEach(addChurch);
+        }
+
+        function errorHandler(evt) {
+            if(evt.target.error.name == "NotReadableError") {
+                alert("Can't read file !");
+            }
+        }
+
+        function churchNameSort(a, b) {
+            return (a.Name.toLowerCase() > b.Name.toLowerCase()) - (b.Name.toLowerCase() > a.Name.toLowerCase());
+        }
+
+        function number(churchObject) {
+            churchObject["Map Label"] = getLabelNumber(churchObject.Name);
+        }
+
+        function getLabelNumber(churchName) {
+            if (churchName.indexOf("Tenth") > -1) { // save a special place for Tenth.
+                labelsUsed.push(10);
+                return 10;
+            }
+
+            for (var i=0; ++i; i<100) {
+                if (i==10)  // save a special place for Tenth.
+                    continue;
+
+                if (labelsUsed.indexOf(i) == -1) {
+                    labelsUsed.push(i);
+                    return i;
+                }
+            }
+        }
+
+        function addChurch(churchObject) {
+            if (churchObject.Name == '')
+                return;
+
+            geocoder.geocode({ 'address': churchObject["Mapped Address"] }, function (results, status) {
+                lbl = churchObject['Map Label']; // labels are generated even for those churches which aren't listed.  This means the numbers generally match the order on the list.
+                if (status == google.maps.GeocoderStatus.OK) {
+                    if (google.maps.geometry.spherical.computeDistanceBetween(drexelLatLong, results[0].geometry.location) < (1609.344 * 2)) { // 2 miles
+                        var marker = new google.maps.Marker({
+                            map: map,
+                            text: lbl.toString(),
+                            icon: 'church-icon.png',
+                            visible: false,
+                            position: results[0].geometry.location,
+                            zIndex: 40
+                        });
+                        var label = new Label({
+                            map: map
+                        });
+                        label.bindTo('position', marker, 'position');
+                        label.bindTo('text', marker, 'text');
+                        bounds.extend(new google.maps.LatLng(results[0].geometry.location.k, results[0].geometry.location.B));
+                    } else {
+                        lbl = "outside radius"
+                    }
+                } else {
+                    alert("Geocode was not successful for the following reason: " + status);
+                }
+                churchObject["Map Label"] = lbl;
+
+                addToTable(churchObject);
+            });
+        }
+
+        function addToTable(churchObject) {
+            var table = document.getElementsByTagName('table')[0];
+            var tr = document.createElement('tr');
+
+            if (!tableHasHeaders) {
+                for (prop in churchObject) {
+                    var th = document.createElement('th');
+                    if (!churchObject.hasOwnProperty(prop))
+                        continue;
+                    th.innerHTML = prop;
+                    tr.appendChild(th);
+                }
+                table.appendChild(tr);
+                tr = document.createElement('tr');
+                tableHasHeaders = true;
+            }
+
+            for (prop in churchObject) {
+                var td = document.createElement('td');
+                if (!churchObject.hasOwnProperty(prop))
+                    continue;
+                td.innerHTML = churchObject[prop];
+                tr.appendChild(td);
+            }
+            table.appendChild(tr);
+
+
+        }
+    </script>
+</head>
+ 
+<body>
+
+<p>Directions:</p>
+<ol>
+    <li>Download <a href="Find-A-Church.json">this JSON file</a>, and modify it appropriately.  The "Name" and "Mapped Address" fields are required.
+        All other fields are optional, and can be added or removed as you like, but any fields used should be present for all churches.</li>
+    <li>Load your modified file here: <input type="file" id="csvFileInput" onchange="handleJsonFile(this.files)" accept=".json"></li>
+    <li>Screenshot the map below.  You may have to zoom your screen out.  Unfortunately, no, there isn't a better way.  </li>
+    <li>The table at the bottom of the page has whatever info was in the JSON file, as well as a "Map Label" column.</li>
+</ol>
+
+
+ 
+<div id="map"></div>
+
+<table></table>
+ 
+</body>
+</html>
